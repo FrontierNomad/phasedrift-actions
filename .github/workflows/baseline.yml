@@ -1,0 +1,62 @@
+name: PhaseDrift merged-code baseline
+on:
+  workflow_call:
+    inputs:
+      source-id:
+        required: true
+        type: string
+      runner-labels:
+        description: JSON labels for an explicitly approved runner; never infer free hosted minutes.
+        required: false
+        default: '["self-hosted","phasedrift-baseline"]'
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  baseline:
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact event revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Download pinned PhaseDrift collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${RUNNER_OS}/${RUNNER_ARCH}" in
+            Linux/X64) archive='phasedrift-baseline/0.4.39/linux-x64/phasedrift-baseline-0.4.39-linux-x64.tar.gz'; expected='1dc039383f4a43d87e4060f2d35f3d7ac3f71f1b761808c690b1f0b4b552a9de' ;;
+            macOS/ARM64) archive='phasedrift-baseline/0.4.39/darwin-arm64/phasedrift-baseline-0.4.39-darwin-arm64.tar.gz'; expected='b9d631adb7549562e29c9e79866e7bf0e785f10694587007d8bf3ef6a1362282' ;;
+            *) echo 'No reviewed collector build for this runner.' >&2; exit 1 ;;
+          esac
+          root="$(mktemp -d "${RUNNER_TEMP}/phasedrift-baseline.XXXXXXXX")"
+          printf 'PHASEDRIFT_CI_ROOT=%s\n' "$root" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "https://downloads.phasedrift.ai/$archive" -o "$root/collector.tar.gz"
+          if command -v shasum >/dev/null; then actual="$(shasum -a 256 "$root/collector.tar.gz" | cut -d ' ' -f 1)"; else actual="$(sha256sum "$root/collector.tar.gz" | cut -d ' ' -f 1)"; fi
+          test "$actual" = "$expected"
+          tar -xzf "$root/collector.tar.gz" -C "$root"
+          printf 'PHASEDRIFT_CI_BIN=%s\n' "$root/$(basename "$archive" .tar.gz)/phasedrift-app" >> "$GITHUB_ENV"
+          command -v git >/dev/null
+          command -v node >/dev/null
+          command -v perl >/dev/null
+      - name: Measure and acknowledge compact results
+        shell: bash
+        env:
+          PHASEDRIFT_SOURCE_ID: ${{ inputs.source-id }}
+        run: |
+          set -euo pipefail
+          collector="$PHASEDRIFT_CI_BIN"
+          "$collector" --repo "$GITHUB_WORKSPACE" --source "$PHASEDRIFT_SOURCE_ID" --state-dir "$PHASEDRIFT_CI_ROOT/evidence" --profile structural
+          # Exercise lost-ACK recovery with the same immutable bytes. No rescan.
+          "$collector" --repo "$GITHUB_WORKSPACE" --source "$PHASEDRIFT_SOURCE_ID" --state-dir "$PHASEDRIFT_CI_ROOT/evidence" --profile structural --resume-upload
+      - name: Remove temporary source-independent reports
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${PHASEDRIFT_CI_ROOT:-}" && "$PHASEDRIFT_CI_ROOT" == "$RUNNER_TEMP"/phasedrift-baseline.* ]]; then
+            rm -rf -- "$PHASEDRIFT_CI_ROOT"
+          fi
