@@ -29,8 +29,8 @@ jobs:
         run: |
           set -euo pipefail
           case "${RUNNER_OS}/${RUNNER_ARCH}" in
-            Linux/X64) archive='phasedrift-baseline/0.4.39/linux-x64/phasedrift-baseline-0.4.39-linux-x64.tar.gz'; expected='1dc039383f4a43d87e4060f2d35f3d7ac3f71f1b761808c690b1f0b4b552a9de' ;;
-            macOS/ARM64) archive='phasedrift-baseline/0.4.39/darwin-arm64/phasedrift-baseline-0.4.39-darwin-arm64.tar.gz'; expected='b9d631adb7549562e29c9e79866e7bf0e785f10694587007d8bf3ef6a1362282' ;;
+            Linux/X64) archive='phasedrift-baseline/0.4.42/linux-x64/phasedrift-baseline-0.4.42-linux-x64.tar.gz'; expected='db9ed8c5b0e028d614a0506dcd84f003758b6ade4c3051454691c8b67d7487af' ;;
+            macOS/ARM64) archive='phasedrift-baseline/0.4.42/darwin-arm64/phasedrift-baseline-0.4.42-darwin-arm64.tar.gz'; expected='e5a056a335dcfb3475dea7b87decc678466c01982fe1b4074454ac1a91e04209' ;;
             *) echo 'No reviewed collector build for this runner.' >&2; exit 1 ;;
           esac
           root="$(mktemp -d "${RUNNER_TEMP}/phasedrift-baseline.XXXXXXXX")"
@@ -39,7 +39,15 @@ jobs:
           if command -v shasum >/dev/null; then actual="$(shasum -a 256 "$root/collector.tar.gz" | cut -d ' ' -f 1)"; else actual="$(sha256sum "$root/collector.tar.gz" | cut -d ' ' -f 1)"; fi
           test "$actual" = "$expected"
           tar -xzf "$root/collector.tar.gz" -C "$root"
-          printf 'PHASEDRIFT_CI_BIN=%s\n' "$root/$(basename "$archive" .tar.gz)/phasedrift-app" >> "$GITHUB_ENV"
+          collector_root="$root/$(basename "$archive" .tar.gz)"
+          cat "$collector_root/BUILD.json"
+          printf '\n'
+          collector_bun="$(BUN_BE_BUN=1 "$collector_root/phasedrift-app" --version)"
+          analyzer_bun="$(BUN_BE_BUN=1 "$collector_root/runtime" --version)"
+          test "$collector_bun" = '1.4.3'
+          test "$analyzer_bun" = '1.4.3'
+          printf 'Verified collector and analyzer runtime: Bun %s\n' "$collector_bun"
+          printf 'PHASEDRIFT_CI_BIN=%s\n' "$collector_root/phasedrift-app" >> "$GITHUB_ENV"
           command -v git >/dev/null
           command -v node >/dev/null
           command -v perl >/dev/null

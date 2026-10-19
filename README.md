@@ -6,6 +6,12 @@ Follow [the setup guide](https://phasedrift.ai/docs/github-baselines). Your setu
 
 The workflow defaults to an explicitly approved self-hosted runner with `self-hosted` and `phasedrift-baseline` labels. Installation alone does not provision a runner. Private caller hosted minutes can incur charges. Unrelated Actions, backups and paid analysis are unchanged.
 
-Supported collectors: Linux x64 and macOS ARM64. Git, Node.js and Perl are required. The collector includes a pinned runtime and analyzers. The current workflow runs structural diagnostics; it does not run project builds, tests or deployments.
+Supported collectors: Linux x64 and macOS ARM64. Git, Node.js and Perl are required. The collector includes Bun 1.4.3 and pinned analyzers. Each job verifies both embedded runtimes and logs the immutable build metadata before scanning. The current workflow runs structural diagnostics; it does not run project builds, tests or deployments.
 
 The collector is PhaseDrift subscription software. This repository contains only its workflow orchestration and documentation. Report security issues privately to hello@phasedrift.ai.
+
+## Collector updates
+
+Archives and workflow commits are immutable. Existing callers keep their reviewed version until upgraded deliberately. When upgrading, let active baseline jobs finish, re-run `phasedrift baseline connect` to authorize the current server-approved workflow using the existing App installation, then generate `phasedrift baseline workflow` and review its exact SHA. Merge only that caller change through the repository release process. Do not broaden App permissions or enable unrelated workflows.
+
+Accept the upgrade only after a genuine main push reports the new build/runtime in GitHub logs and `phasedrift baseline status` agrees on the exact main commit and acknowledged attempt. Repeating the frozen upload must return the same receipt. A runtime change creates a new environment comparison group; older results remain historical evidence.
