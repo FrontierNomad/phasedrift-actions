@@ -15,3 +15,9 @@ The collector is PhaseDrift subscription software. This repository contains only
 Archives and workflow commits are immutable. Existing callers keep their reviewed version until upgraded deliberately. When upgrading, let active baseline jobs finish, re-run `phasedrift baseline connect` to authorize the current server-approved workflow using the existing App installation, then generate `phasedrift baseline workflow` and review its exact SHA. Merge only that caller change through the repository release process. Do not broaden App permissions or enable unrelated workflows.
 
 Accept the upgrade only after a genuine main push reports the new build/runtime in GitHub logs and `phasedrift baseline status` agrees on the exact main commit and acknowledged attempt. Repeating the frozen upload must return the same receipt. A runtime change creates a new environment comparison group; older results remain historical evidence.
+
+## Recovery and admission
+
+Collector 0.4.46 checks admission before scanning, retries transient failures at most three times per operation, and reuses the exact frozen payload for upload retries. Permanent capacity and authorization failures stop. Ordinary baselines scan once. Set `exercise-lost-ack: true` only for a targeted integration run to replay an acknowledged payload without rescanning.
+
+After a failed job, only compact `upload.json` is retained as a one-day artifact; temporary analyzer files are removed. Recovery remains bound to the same genuine run and attempt within 24 hours. A new workflow attempt cannot upload a previous attempt's payload.
