@@ -10,6 +10,11 @@ on:
         required: false
         default: '["self-hosted","phasedrift-baseline"]'
         type: string
+      exercise-lost-ack:
+        description: Replay acknowledged bytes for a targeted recovery integration test.
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
   id-token: write
@@ -29,8 +34,8 @@ jobs:
         run: |
           set -euo pipefail
           case "${RUNNER_OS}/${RUNNER_ARCH}" in
-            Linux/X64) archive='phasedrift-baseline/0.4.42/linux-x64/phasedrift-baseline-0.4.42-linux-x64.tar.gz'; expected='db9ed8c5b0e028d614a0506dcd84f003758b6ade4c3051454691c8b67d7487af' ;;
-            macOS/ARM64) archive='phasedrift-baseline/0.4.42/darwin-arm64/phasedrift-baseline-0.4.42-darwin-arm64.tar.gz'; expected='e5a056a335dcfb3475dea7b87decc678466c01982fe1b4074454ac1a91e04209' ;;
+            Linux/X64) archive='phasedrift-baseline/0.4.46/linux-x64/phasedrift-baseline-0.4.46-linux-x64.tar.gz'; expected='25b3705aeeba8d1a5e5ede3f916810dd97936fd2d31fc482d10a896a9455a444' ;;
+            macOS/ARM64) archive='phasedrift-baseline/0.4.46/darwin-arm64/phasedrift-baseline-0.4.46-darwin-arm64.tar.gz'; expected='049a9f7578fb1743f58890409c0d6644cb9d8bfd96ded01741dd5a1efb99d492' ;;
             *) echo 'No reviewed collector build for this runner.' >&2; exit 1 ;;
           esac
           root="$(mktemp -d "${RUNNER_TEMP}/phasedrift-baseline.XXXXXXXX")"
@@ -59,8 +64,22 @@ jobs:
           set -euo pipefail
           collector="$PHASEDRIFT_CI_BIN"
           "$collector" --repo "$GITHUB_WORKSPACE" --source "$PHASEDRIFT_SOURCE_ID" --state-dir "$PHASEDRIFT_CI_ROOT/evidence" --profile structural
-          # Exercise lost-ACK recovery with the same immutable bytes. No rescan.
-          "$collector" --repo "$GITHUB_WORKSPACE" --source "$PHASEDRIFT_SOURCE_ID" --state-dir "$PHASEDRIFT_CI_ROOT/evidence" --profile structural --resume-upload
+      - name: Exercise lost-ACK recovery without rescanning
+        if: inputs.exercise-lost-ack
+        shell: bash
+        env:
+          PHASEDRIFT_SOURCE_ID: ${{ inputs.source-id }}
+        run: |
+          set -euo pipefail
+          "$PHASEDRIFT_CI_BIN" --repo "$GITHUB_WORKSPACE" --source "$PHASEDRIFT_SOURCE_ID" --state-dir "$PHASEDRIFT_CI_ROOT/evidence" --profile structural --resume-upload
+      - name: Retain compact frozen upload after failure
+        if: failure() && env.PHASEDRIFT_CI_ROOT != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: phasedrift-upload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PHASEDRIFT_CI_ROOT }}/evidence/upload.json
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Remove temporary source-independent reports
         if: always()
         shell: bash
